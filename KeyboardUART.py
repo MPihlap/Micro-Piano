@@ -19,7 +19,6 @@ def init_uart(baud=9600, stopBit=1, parity=0):
 
 keyboard.on_press(cb)
 ser = init_uart()
-# Protocol: word amount and then data
 while True:
     msg = "0"
     for i in pressed_keys:
@@ -31,8 +30,6 @@ while True:
         else:
             msg = i
             ser.write(bytes(msg, "utf-8"))
-    # msg = str(len(pressed_keys)) + msg
-    #ser.write(bytes(msg, "utf-8"))
     if keyboard.is_pressed('esc'):
         break
     time.sleep(0.01)
