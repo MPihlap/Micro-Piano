@@ -7,135 +7,83 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include "piano.h"
+
 #define SPEAKER PB6
 #define SYSTEM_CLOCK 2000000
-#define PRESCALER 1
-#define	C4 261
-#define D4b 277
-#define D4 293
-#define E4b 311
-#define E4 329
-#define F4 349
-#define Gb4 370
-#define G4 392
-#define A4b 415
-#define A4 440
-#define B4b 466
-#define B4 493
-#define C5 523
-#define Db5 554
-#define D5 587
-#define Eb5 622
-#define E5 659
 
 void start_timer();
 void stop_timer();
-volatile uint16_t activeNote = E4;
-volatile uint8_t heldKeys[] = {0, 0, 0, 0};
-volatile uint8_t key = 0;
-volatile uint8_t lastKey = 0;
+volatile uint8_t key = 0;	// Last key that was pressed on keyboard
 
 ISR(TIMER1_COMPA_vect){
-	PORTB = PINB ^ (1 << SPEAKER);
+	PORTB = PINB ^ (1 << SPEAKER);	// Toggle speaker
 }
 ISR(USART1_RX_vect){
 	char value = UDR1;
-	if (value == '0') {
-		//heldKeys[0] = 0;
-		key = 1;
-		stop_timer();
+	if (value == '0') {	// If silence requested, set key to 0
+		key = 0;
 	}
-	else {
-		//heldKeys[0] = UDR1;
-		lastKey = key;
+	else {	// If a note is to be played, set key to the key pressed
 		key = value;
-		switch (key){
-			case 'a' :
-				activeNote = C4;
-				break;
-			case  'w' :
-				activeNote = D4b;
-				break;
-			case 's' :
-				activeNote = D4;
-				break;
-			case 'e' :
-				activeNote = E4b;
-				break;
-			case 'd' :
-				activeNote = E4;
-				break;
-			case 'f' :
-				activeNote = F4;
-				break;
-			case 't' :
-				activeNote = Gb4;
-				break;
-			case 'g' :
-				activeNote = G4;
-				break;
-			case 'y' :
-				activeNote = A4b;
-				break;
-			case 'h' :
-				activeNote = A4;
-				break;
-			case 'u' :
-				activeNote = B4b;
-				break;
-			case 'j' :
-				activeNote = B4;
-				break;
-			case 'k' :
-				activeNote = C5;
-				break;
-			case 'o' :
-				activeNote = Db5;
-				break;
-			case 'l' :
-				activeNote = D5;
-				break;
-			case 'p' :
-				activeNote = Eb5;
-				break;
-			case 'ö' :
-				activeNote = E5;
-				break;
-			default :
-				key = 1;
-				stop_timer();
-				break;
-			
-		}
-		if (key != 1) {
-			start_timer();
-		}
-		
 	}
 }
-uint16_t getCounterLimit(int frequency) {
+uint16_t selectNote(uint8_t key){	// Select musical frequency based on key that was pressed
+	switch (key){
+		case 'a' :
+			return C4;
+		case  'w' :
+			return D4b;
+		case 's' :
+			return D4;
+		case 'e' :
+			return E4b;
+		case 'd' :
+			return E4;
+		case 'f' :
+			return F4;
+		case 't' :
+			return Gb4;
+		case 'g' :
+			return G4;
+		case 'y' :
+			return A4b;
+		case 'h' :
+			return A4;
+		case 'u' :
+			return B4b;
+		case 'j' :
+			return B4;
+		case 'k' :
+			return C5;
+		case 'o' :
+			return Db5;
+		case 'l' :
+			return D5;
+		case 'p' :
+			return Eb5;
+		default :
+			return SILENCE;
+	}
+}
+uint16_t getCounterLimit(int frequency) {	// Calculate timer limit based on sys clock speed and frequency of note to be played
 	return SYSTEM_CLOCK/(frequency*2);
 }
-void send_uart(char word){
-	while (!(UCSR1A & (1 << UDRE1))) {
-		asm("nop");
-	}
-	UDR1 = word;
-}
-void init_uart(){
+
+void init_uart(){	// 9600 baud, no parity
 	UBRR1 = 12;
 	UCSR1B = (1 << TXEN1) | (1 << RXEN1) | (1 << RXCIE1);
 	UCSR1C = (1 << UCSZ10) | (1 << UCSZ11);
 }
-void init_timer() {		// NB! DOES NOT START TIMER
+void init_timer() {			// NB! DOES NOT START TIMER
 	TCCR1A = (1 << COM1A1); // CTC TOP = OCR1A
-	TCCR1B = (1 << WGM12);
+	TCCR1B = (1 << WGM12);	
 	TIMSK1 = 1 << OCIE1A;
 }
-void start_timer() {
+void start_timer() {	// Start timer by enabling clock
 	TCCR1B |= 1 << CS10;
 }
-void stop_timer() {
+void stop_timer() {		// Pause timer by disabling clock
 	TCCR1B &= ~(1<<CS10);
 }
 
@@ -143,15 +91,21 @@ int main(void)
 {
 	init_uart();
 	init_timer();
-	OCR1A = getCounterLimit(activeNote);
-	//start_timer();
-	sei();
-    DDRA = 0xFF;
-	PORTA = 0xFF;
-	DDRB = 1 << SPEAKER;
+	uint16_t activeNote;	// Note currently being played
+
+	sei();					// Enable interrupts
+    DDRA = 0xFF;			// Set PORTA leds as output
+	DDRB = 1 << SPEAKER;	// Set speaker pin as output
     while (1) {
 		PORTA = key;
-		OCR1A = getCounterLimit(activeNote);
+		activeNote = selectNote(key);	// decipher what note is to be played
+		if (activeNote == SILENCE) {	// if no note is to be played, stop timer
+			stop_timer();
+		}
+		else {							// If a sound is to be played, start timer and set limit accordingly
+			start_timer();
+			OCR1A = getCounterLimit(activeNote);
+		}
 	}
 }
 
