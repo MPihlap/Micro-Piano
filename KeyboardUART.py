@@ -25,11 +25,10 @@ while True:
         if not keyboard.is_pressed(i):
             print(i + " is not pressed anymore")
             pressed_keys.pop(pressed_keys.index(i))
-            msg = "0"
-            ser.write(bytes(msg, "utf-8"))
+        if len(pressed_keys) == 0:
+            ser.write(bytes("0", "utf-8"))
         else:
-            msg = i
-            ser.write(bytes(msg, "utf-8"))
+            ser.write(bytes(pressed_keys[-1], "utf-8"))
     if keyboard.is_pressed('esc'):
         break
     time.sleep(0.01)
